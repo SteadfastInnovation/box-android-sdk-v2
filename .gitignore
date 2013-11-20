@@ -3,7 +3,6 @@ gen/
 dist/
 *.class
 local.properties
-BoxJavaLibraryV2.jar
 build/
 .gradle
 .DS_Store
