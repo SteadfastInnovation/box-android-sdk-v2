@@ -11,6 +11,7 @@ import org.apache.http.NameValuePair;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.ProgressDialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.graphics.Bitmap;
@@ -82,12 +83,20 @@ public class OAuthWebView extends WebView implements IAuthFlowUI {
         mWebViewData.setOptionalState(optionalState);
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
     @Override
     public void initializeAuthFlow(final Object activity, final String clientId, final String clientSecret) {
+        initializeAuthFlow(activity, clientId, clientSecret, null);
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    @Override
+    public void initializeAuthFlow(Object activity, String clientId, String clientSecret, String redirectUrl) {
         AndroidBoxResourceHub hub = new AndroidBoxResourceHub();
         BoxAndroidClient boxClient = new BoxAndroidClient(clientId, clientSecret, hub, new BoxJSONParser(hub));
         this.mWebViewData = new OAuthWebViewData(boxClient.getOAuthDataController());
+        if (StringUtils.isNotEmpty(redirectUrl)) {
+            mWebViewData.setRedirectUrl(redirectUrl);
+        }
         mWebClient = createOAuthWebViewClient(mWebViewData, activity, boxClient);
         getSettings().setJavaScriptEnabled(true);
         setWebViewClient(mWebClient);
@@ -219,6 +228,9 @@ public class OAuthWebView extends WebView implements IAuthFlowUI {
                 }
                 setStartedCreateOAuth(true);
                 startCreateOAuth(code);
+                if (!allowShowRedirectPage()) {
+                    view.setVisibility(View.INVISIBLE);
+                }
             }
         }
 
@@ -262,6 +274,8 @@ public class OAuthWebView extends WebView implements IAuthFlowUI {
             fireEvents(OAuthEvent.PAGE_FINISHED, new StringMessage(StringMessage.MESSAGE_URL, url));
         }
 
+        private static ProgressDialog dialog;
+
         /**
          * Start to create OAuth after getting the code.
          * 
@@ -271,6 +285,8 @@ public class OAuthWebView extends WebView implements IAuthFlowUI {
          *            code
          */
         private void startCreateOAuth(final String code) {
+            dialog = ProgressDialog.show(mActivity, mActivity.getText(R.string.boxandroidlibv2_Authenticating),
+                mActivity.getText(R.string.boxandroidlibv2_Please_wait));
             AsyncTask<Null, Null, BoxAndroidOAuthData> task = new AsyncTask<Null, Null, BoxAndroidOAuthData>() {
 
                 @Override
@@ -293,6 +309,9 @@ public class OAuthWebView extends WebView implements IAuthFlowUI {
 
                 @Override
                 protected void onPostExecute(final BoxAndroidOAuthData result) {
+                    if (dialog != null && dialog.isShowing()) {
+                        dialog.dismiss();
+                    }
                     if (result != null) {
                         try {
                             setStartedCreateOAuth(false);
