@@ -285,8 +285,16 @@ public class OAuthWebView extends WebView implements IAuthFlowUI {
          *            code
          */
         private void startCreateOAuth(final String code) {
-            dialog = ProgressDialog.show(mActivity, mActivity.getText(R.string.boxandroidlibv2_Authenticating),
-                mActivity.getText(R.string.boxandroidlibv2_Please_wait));
+            try {
+                dialog = ProgressDialog.show(mActivity, mActivity.getText(R.string.boxandroidlibv2_Authenticating),
+                    mActivity.getText(R.string.boxandroidlibv2_Please_wait));
+            }
+            catch (Exception e) {
+                // WindowManager$BadTokenException will be caught and the app would not display
+                // the 'Force Close' message
+                dialog = null;
+                return;
+            }
             AsyncTask<Null, Null, BoxAndroidOAuthData> task = new AsyncTask<Null, Null, BoxAndroidOAuthData>() {
 
                 @Override
@@ -296,8 +304,8 @@ public class OAuthWebView extends WebView implements IAuthFlowUI {
                         BoxOAuthRequestObject requestObj = BoxOAuthRequestObject.createOAuthRequestObject(code, mwebViewData.getClientId(),
                             mwebViewData.getClientSecret(), mwebViewData.getRedirectUrl());
                         if (StringUtils.isNotEmpty(deviceId) && StringUtils.isNotEmpty(deviceName)) {
-                            requestObj.put("device_id", deviceId);
-                            requestObj.put("device_name", deviceName);
+                            requestObj.put("box_device_id", deviceId);
+                            requestObj.put("box_device_name", deviceName);
                         }
                         oauth = (BoxAndroidOAuthData) mBoxClient.getOAuthManager().createOAuth(requestObj);
                     }
