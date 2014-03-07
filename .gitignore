@@ -1,9 +1,34 @@
+# Built application files
+*.apk
+*.ap_
+
+# Files for the dex VM
+*.dex
+
+# Java class files
+*.class
+
+# Gradle cache
+.gradle/
+
+# Generated files
 bin/
 gen/
-dist/
-*.class
-local.properties
-BoxJavaLibraryV2.jar
+out/
 build/
-.gradle
-.DS_Store
+
+# Local configuration file (sdk path, etc)
+local.properties
+
+# Local IDEA workspace and tasks
+.idea/workspace.xml
+.idea/tasks.xml
+
+# IDEA library files
+.idea/libraries/
+
+# IDEA non-crucial project files
+*.iws
+
+# Windows thumbnail db
+*.DS_Store
