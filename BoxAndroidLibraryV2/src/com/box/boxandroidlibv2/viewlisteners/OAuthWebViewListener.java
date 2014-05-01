@@ -1,11 +1,10 @@
 package com.box.boxandroidlibv2.viewlisteners;
 
 import android.net.http.SslError;
-import android.webkit.SslErrorHandler;
 
-import com.box.boxjavalibv2.interfaces.IAuthEvent;
-import com.box.boxjavalibv2.interfaces.IAuthFlowListener;
-import com.box.boxjavalibv2.interfaces.IAuthFlowMessage;
+import com.box.boxjavalibv2.authorization.IAuthEvent;
+import com.box.boxjavalibv2.authorization.IAuthFlowListener;
+import com.box.boxjavalibv2.authorization.IAuthFlowMessage;
 
 /**
  * Listener listening to the {@link com.box.boxandroidlibv2.views.OAuthWebView}.
@@ -22,15 +21,14 @@ public abstract class OAuthWebViewListener implements IAuthFlowListener {
     public abstract void onAuthFlowEvent(IAuthEvent event, IAuthFlowMessage message);
 
     /**
-     * This indicates a SSL Error, implement this method to handle this error.
+     * This indicates a SSL Error.
      * 
-     * @param handler
-     *            SslErrorHandler the handler handle this error. For example, you can simply do handler.process() to ignore this error or handler.cancel() to
-     *            stop web page loading.
      * @param error
      *            error details.
+     * @param canceled
+     *            Whether the operation is canceled due to the ssl error.
      */
-    public abstract void onSslError(SslErrorHandler handler, SslError error);
+    public abstract void onSslError(SslError error, boolean canceled);
 
     /**
      * This indicates the webview receives some error. Implement this method to handle properly.

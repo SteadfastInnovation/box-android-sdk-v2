@@ -29,10 +29,10 @@ import com.box.boxjavalibv2.authorization.OAuthRefreshListener;
 import com.box.boxjavalibv2.dao.BoxCollection;
 import com.box.boxjavalibv2.dao.BoxFolder;
 import com.box.boxjavalibv2.dao.BoxTypedObject;
+import com.box.boxjavalibv2.dao.IAuthData;
 import com.box.boxjavalibv2.exceptions.AuthFatalFailureException;
-import com.box.boxjavalibv2.interfaces.IAuthData;
-import com.box.boxjavalibv2.requests.requestobjects.BoxFileUploadRequestObject;
 import com.box.restclientv2.exceptions.BoxSDKException;
+import com.box.restclientv2.requestsbase.BoxFileUploadRequestObject;
 
 public class FileListActivity extends ListActivity {
 
@@ -83,10 +83,19 @@ public class FileListActivity extends ListActivity {
             }
         });
 
-        startAuth();
+        if (!authenticated()) {
+        	startAuth();
+        } else {
+        	onClientAuthenticated();
+        }
     }
 
-    /**
+    private boolean authenticated() {
+		BoxAndroidClient client = ((BoxSDKSampleApplication) getApplication()).getClient();
+		return client != null && client.isAuthenticated();
+	}
+
+	/**
      * Get the result from OAuth activity, this either returns an error message or a parceled BoxAndroidClient.
      */
     @Override
@@ -101,7 +110,7 @@ public class FileListActivity extends ListActivity {
                 }
                 else {
                     BoxAndroidOAuthData oauth = data.getParcelableExtra(OAuthActivity.BOX_CLIENT_OAUTH);
-                    BoxAndroidClient client = new BoxAndroidClient(BoxSDKSampleApplication.CLIENT_ID, BoxSDKSampleApplication.CLIENT_SECRET, null, null);
+                    BoxAndroidClient client = new BoxAndroidClient(BoxSDKSampleApplication.CLIENT_ID, BoxSDKSampleApplication.CLIENT_SECRET, null, null, null);
                     client.authenticate(oauth);
                     BoxSDKSampleApplication app = (BoxSDKSampleApplication) getApplication();
                     client.addOAuthRefreshListener(new OAuthRefreshListener() {
@@ -264,8 +273,7 @@ public class FileListActivity extends ListActivity {
                 }
 
                 try {
-                    BoxFileUploadRequestObject upload = BoxFileUploadRequestObject.uploadFileRequestObject("0", "Sample File.txt", sampleFile, getClient()
-                        .getJSONParser());
+                    BoxFileUploadRequestObject upload = BoxFileUploadRequestObject.uploadFileRequestObject("0", "Sample File.txt", sampleFile);
                     getClient().getFilesManager().uploadFile(upload);
                     Log.v(TAG, "Sample file successfully uploaded.");
                 }

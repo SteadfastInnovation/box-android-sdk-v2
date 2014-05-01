@@ -14,6 +14,8 @@ import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.content.DialogInterface.OnDismissListener;
+import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.net.http.SslError;
 import android.os.AsyncTask;
@@ -27,6 +29,7 @@ import android.webkit.WebViewClient;
 import android.widget.EditText;
 
 import com.box.boxandroidlibv2.BoxAndroidClient;
+import com.box.boxandroidlibv2.BoxAndroidConfigBuilder;
 import com.box.boxandroidlibv2.R;
 import com.box.boxandroidlibv2.dao.BoxAndroidOAuthData;
 import com.box.boxandroidlibv2.exceptions.BoxAndroidLibException;
@@ -35,15 +38,14 @@ import com.box.boxandroidlibv2.jsonparsing.AndroidBoxResourceHub;
 import com.box.boxandroidlibv2.viewlisteners.OAuthWebViewListener;
 import com.box.boxandroidlibv2.viewlisteners.StringMessage;
 import com.box.boxjavalibv2.BoxClient;
+import com.box.boxjavalibv2.authorization.IAuthEvent;
+import com.box.boxjavalibv2.authorization.IAuthFlowListener;
+import com.box.boxjavalibv2.authorization.IAuthFlowMessage;
+import com.box.boxjavalibv2.authorization.IAuthFlowUI;
 import com.box.boxjavalibv2.authorization.OAuthDataMessage;
 import com.box.boxjavalibv2.authorization.OAuthWebViewData;
 import com.box.boxjavalibv2.events.OAuthEvent;
-import com.box.boxjavalibv2.interfaces.IAuthEvent;
-import com.box.boxjavalibv2.interfaces.IAuthFlowListener;
-import com.box.boxjavalibv2.interfaces.IAuthFlowMessage;
-import com.box.boxjavalibv2.interfaces.IAuthFlowUI;
 import com.box.boxjavalibv2.jsonparsing.BoxJSONParser;
-import com.box.boxjavalibv2.requests.requestobjects.BoxOAuthRequestObject;
 import com.box.restclientv2.httpclientsupport.HttpClientURIBuilder;
 
 /**
@@ -60,6 +62,8 @@ public class OAuthWebView extends WebView implements IAuthFlowUI {
     private String deviceId;
 
     private String deviceName;
+
+    private final List<OAuthWebViewListener> mListeners = new ArrayList<OAuthWebViewListener>();
 
     /**
      * Constructor.
@@ -88,11 +92,16 @@ public class OAuthWebView extends WebView implements IAuthFlowUI {
         initializeAuthFlow(activity, clientId, clientSecret, null);
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
     @Override
     public void initializeAuthFlow(Object activity, String clientId, String clientSecret, String redirectUrl) {
         AndroidBoxResourceHub hub = new AndroidBoxResourceHub();
-        BoxAndroidClient boxClient = new BoxAndroidClient(clientId, clientSecret, hub, new BoxJSONParser(hub));
+        initializeAuthFlow(activity, clientId, clientSecret, redirectUrl, new BoxAndroidClient(clientId, clientSecret, hub, new BoxJSONParser(hub),
+            (new BoxAndroidConfigBuilder()).build()));
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    @Override
+    public void initializeAuthFlow(Object activity, String clientId, String clientSecret, String redirectUrl, BoxClient boxClient) {
         this.mWebViewData = new OAuthWebViewData(boxClient.getOAuthDataController());
         if (StringUtils.isNotEmpty(redirectUrl)) {
             mWebViewData.setRedirectUrl(redirectUrl);
@@ -105,7 +114,11 @@ public class OAuthWebView extends WebView implements IAuthFlowUI {
 
     @Override
     public void authenticate(IAuthFlowListener listener) {
-        mWebClient.addListener(listener);
+        addAuthFlowListener(listener);
+
+        for (IAuthFlowListener l : mListeners) {
+            mWebClient.addListener(wrapOAuthWebViewListener(l));
+        }
 
         try {
             loadUrl(mWebViewData.buildUrl().toString());
@@ -117,6 +130,11 @@ public class OAuthWebView extends WebView implements IAuthFlowUI {
         }
     }
 
+    @Override
+    public void addAuthFlowListener(IAuthFlowListener listener) {
+        mListeners.add(wrapOAuthWebViewListener(listener));
+    }
+
     public void setDevice(final String id, final String name) {
         deviceId = id;
         deviceName = name;
@@ -125,10 +143,15 @@ public class OAuthWebView extends WebView implements IAuthFlowUI {
         }
     }
 
-    /*
-     * (non-Javadoc)
-     * @see android.webkit.WebView#destroy()
-     */
+    private static OAuthWebViewListener wrapOAuthWebViewListener(IAuthFlowListener listener) {
+        if (listener instanceof OAuthWebViewListener) {
+            return (OAuthWebViewListener) listener;
+        }
+        else {
+            return new WrappedOAuthWebViewListener(listener);
+        }
+    }
+
     @Override
     public void destroy() {
         super.destroy();
@@ -163,16 +186,21 @@ public class OAuthWebView extends WebView implements IAuthFlowUI {
      */
     public static class OAuthWebViewClient extends WebViewClient {
 
+        private static enum OAuthAPICallState {
+            PRE, STARTED, FINISHED,
+        };
+
         private BoxClient mBoxClient;
         private final OAuthWebViewData mwebViewData;
         private boolean allowShowRedirectPage = true;
-        private boolean startedCreateOAuth = false;
+        private OAuthAPICallState oauthAPICallState = OAuthAPICallState.PRE;
+        private boolean sslErrorDialogButtonClicked;
 
         private String deviceId;
 
         private String deviceName;
 
-        private final List<IAuthFlowListener> mListeners = new ArrayList<IAuthFlowListener>();
+        private final List<OAuthWebViewListener> mListeners = new ArrayList<OAuthWebViewListener>();
         private Activity mActivity;
 
         /**
@@ -197,12 +225,12 @@ public class OAuthWebView extends WebView implements IAuthFlowUI {
             deviceName = name;
         }
 
-        public void addListener(final IAuthFlowListener listener) {
+        public void addListener(final OAuthWebViewListener listener) {
             this.mListeners.add(listener);
         }
 
-        void setStartedCreateOAuth(boolean started) {
-            startedCreateOAuth = started;
+        private void setOAuthAPICallState(OAuthAPICallState state) {
+            oauthAPICallState = state;
         }
 
         @Override
@@ -226,17 +254,13 @@ public class OAuthWebView extends WebView implements IAuthFlowUI {
                         listener.onAuthFlowMessage(new StringMessage(mwebViewData.getResponseType(), code));
                     }
                 }
-                setStartedCreateOAuth(true);
-                startCreateOAuth(code);
-                if (!allowShowRedirectPage()) {
-                    view.setVisibility(View.INVISIBLE);
-                }
+                startMakingOAuthAPICall(code, view);
             }
         }
 
         @Override
         public boolean shouldOverrideUrlLoading(WebView view, String url) {
-            if (startedCreateOAuth && !allowShowRedirectPage()) {
+            if ((oauthAPICallState != OAuthAPICallState.PRE) && !allowShowRedirectPage()) {
                 return true;
             }
             return false;
@@ -283,8 +307,14 @@ public class OAuthWebView extends WebView implements IAuthFlowUI {
          *            config
          * @param code
          *            code
+         * @param view
          */
-        private void startCreateOAuth(final String code) {
+        private void startMakingOAuthAPICall(final String code, WebView view) {
+            if (oauthAPICallState != OAuthAPICallState.PRE) {
+                return;
+            }
+
+            oauthAPICallState = OAuthAPICallState.STARTED;
             try {
                 dialog = ProgressDialog.show(mActivity, mActivity.getText(R.string.boxandroidlibv2_Authenticating),
                     mActivity.getText(R.string.boxandroidlibv2_Please_wait));
@@ -295,19 +325,18 @@ public class OAuthWebView extends WebView implements IAuthFlowUI {
                 dialog = null;
                 return;
             }
+
+            if (!allowShowRedirectPage()) {
+                view.setVisibility(View.INVISIBLE);
+            }
             AsyncTask<Null, Null, BoxAndroidOAuthData> task = new AsyncTask<Null, Null, BoxAndroidOAuthData>() {
 
                 @Override
                 protected BoxAndroidOAuthData doInBackground(final Null... params) {
                     BoxAndroidOAuthData oauth = null;
                     try {
-                        BoxOAuthRequestObject requestObj = BoxOAuthRequestObject.createOAuthRequestObject(code, mwebViewData.getClientId(),
-                            mwebViewData.getClientSecret(), mwebViewData.getRedirectUrl());
-                        if (StringUtils.isNotEmpty(deviceId) && StringUtils.isNotEmpty(deviceName)) {
-                            requestObj.put("box_device_id", deviceId);
-                            requestObj.put("box_device_name", deviceName);
-                        }
-                        oauth = (BoxAndroidOAuthData) mBoxClient.getOAuthManager().createOAuth(requestObj);
+                        oauth = (BoxAndroidOAuthData) mBoxClient.getOAuthManager().createOAuth(code, mwebViewData.getClientId(),
+                            mwebViewData.getClientSecret(), mwebViewData.getRedirectUrl(), deviceId, deviceName);
                     }
                     catch (Exception e) {
                         oauth = null;
@@ -317,12 +346,12 @@ public class OAuthWebView extends WebView implements IAuthFlowUI {
 
                 @Override
                 protected void onPostExecute(final BoxAndroidOAuthData result) {
+                    setOAuthAPICallState(OAuthAPICallState.FINISHED);
                     if (dialog != null && dialog.isShowing()) {
                         dialog.dismiss();
                     }
                     if (result != null) {
                         try {
-                            setStartedCreateOAuth(false);
                             fireEvents(OAuthEvent.OAUTH_CREATED, new OAuthDataMessage(result, mBoxClient.getJSONParser(), mBoxClient.getResourceHub()));
                         }
                         catch (Exception e) {
@@ -339,20 +368,86 @@ public class OAuthWebView extends WebView implements IAuthFlowUI {
 
         @Override
         public void onReceivedError(final WebView view, final int errorCode, final String description, final String failingUrl) {
-            for (IAuthFlowListener listener : mListeners) {
-                if (listener != null && listener instanceof OAuthWebViewListener) {
-                    ((OAuthWebViewListener) listener).onError(errorCode, description, failingUrl);
+            if (!allowShowRedirectPage() && oauthAPICallState != OAuthAPICallState.PRE) {
+                // Error happens after oauth api call started. This can only be the redirect page. In case user wants to ignore redirect page, we
+                // swallow this error.
+                return;
+            }
+            for (OAuthWebViewListener listener : mListeners) {
+                if (listener != null) {
+                    listener.onError(errorCode, description, failingUrl);
                 }
             }
         }
 
         @Override
         public void onReceivedSslError(final WebView view, final SslErrorHandler handler, final SslError error) {
-            for (IAuthFlowListener listener : mListeners) {
-                if (listener != null && listener instanceof OAuthWebViewListener) {
-                    ((OAuthWebViewListener) listener).onSslError(handler, error);
-                }
+            Resources resources = view.getContext().getResources();
+            StringBuilder sslErrorMessage = new StringBuilder(
+                resources.getString(R.string.boxandroidlibv2_There_are_problems_with_the_security_certificate_for_this_site));
+            sslErrorMessage.append(" ");
+            String sslErrorType;
+            switch (error.getPrimaryError()) {
+                case SslError.SSL_DATE_INVALID:
+                    sslErrorType = view.getResources().getString(R.string.boxandroidlibv2_ssl_error_warning_DATE_INVALID);
+                    break;
+                case SslError.SSL_EXPIRED:
+                    sslErrorType = resources.getString(R.string.boxandroidlibv2_ssl_error_warning_EXPIRED);
+                    break;
+                case SslError.SSL_IDMISMATCH:
+                    sslErrorType = resources.getString(R.string.boxandroidlibv2_ssl_error_warning_ID_MISMATCH);
+                    break;
+                case SslError.SSL_NOTYETVALID:
+                    sslErrorType = resources.getString(R.string.boxandroidlibv2_ssl_error_warning_NOT_YET_VALID);
+                    break;
+                case SslError.SSL_UNTRUSTED:
+                    sslErrorType = resources.getString(R.string.boxandroidlibv2_ssl_error_warning_UNTRUSTED);
+                    break;
+                case SslError.SSL_INVALID:
+                    sslErrorType = resources.getString(R.string.boxandroidlibv2_ssl_error_warning_INVALID);
+                    break;
+                default:
+                    sslErrorType = resources.getString(R.string.boxandroidlibv2_ssl_error_warning_INVALID);
+                    break;
             }
+            sslErrorMessage.append(sslErrorType);
+            sslErrorMessage.append(" ");
+            sslErrorMessage.append(resources.getString(R.string.boxandroidlibv2_ssl_should_not_proceed));
+            // Show the user a dialog to force them to accept or decline the SSL problem before continuing.
+            sslErrorDialogButtonClicked = false;
+            AlertDialog loginAlert = new AlertDialog.Builder(view.getContext()).setTitle(R.string.boxandroidlibv2_Security_Warning)
+                .setMessage(sslErrorMessage.toString()).setIcon(R.drawable.boxandroidlibv2_dialog_warning)
+                .setPositiveButton(R.string.boxandroidlibv2_Continue, new DialogInterface.OnClickListener() {
+
+                    @Override
+                    public void onClick(final DialogInterface dialog, final int whichButton) {
+                        sslErrorDialogButtonClicked = true;
+                        handler.proceed();
+                        sendoutSslError(error, false);
+                    }
+                }).setNegativeButton(R.string.boxandroidlibv2_Go_back, new DialogInterface.OnClickListener() {
+
+                    @Override
+                    public void onClick(final DialogInterface dialog, final int whichButton) {
+                        sslErrorDialogButtonClicked = true;
+                        handler.cancel();
+                        sendoutSslError(error, true);
+                    }
+                }).create();
+            loginAlert.setOnDismissListener(new OnDismissListener() {
+
+                @Override
+                public void onDismiss(DialogInterface dialog) {
+                    if (!sslErrorDialogButtonClicked) {
+                        sendoutSslError(error, true);
+                    }
+                }
+            });
+            loginAlert.show();
+        }
+
+        protected void handleReceivedError(final WebView view, final int errorCode, final String description, final String failingUrl) {
+            // By default, doing nothing.
         }
 
         /**
@@ -362,6 +457,14 @@ public class OAuthWebView extends WebView implements IAuthFlowUI {
             mListeners.clear();
             mBoxClient = null;
             mActivity = null;
+        }
+
+        private void sendoutSslError(final SslError error, final boolean canceled) {
+            for (OAuthWebViewListener listener : mListeners) {
+                if (listener != null) {
+                    listener.onSslError(error, canceled);
+                }
+            }
         }
 
         /**
@@ -416,4 +519,35 @@ public class OAuthWebView extends WebView implements IAuthFlowUI {
         }
     }
 
+    private static class WrappedOAuthWebViewListener extends OAuthWebViewListener {
+
+        private final IAuthFlowListener mListener;
+
+        WrappedOAuthWebViewListener(IAuthFlowListener listener) {
+            this.mListener = listener;
+        }
+
+        @Override
+        public void onAuthFlowMessage(IAuthFlowMessage message) {
+            mListener.onAuthFlowMessage(message);
+        }
+
+        @Override
+        public void onAuthFlowException(Exception e) {
+            mListener.onAuthFlowException(e);
+        }
+
+        @Override
+        public void onAuthFlowEvent(IAuthEvent event, IAuthFlowMessage message) {
+            mListener.onAuthFlowEvent(event, message);
+        }
+
+        @Override
+        public void onSslError(SslError error, boolean canceled) {
+        }
+
+        @Override
+        public void onError(int errorCode, String description, String failingUrl) {
+        }
+    }
 }

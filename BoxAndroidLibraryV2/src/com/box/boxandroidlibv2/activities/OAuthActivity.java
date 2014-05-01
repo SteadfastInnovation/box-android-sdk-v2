@@ -7,16 +7,16 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.http.SslError;
 import android.os.Bundle;
-import android.webkit.SslErrorHandler;
 
 import com.box.boxandroidlibv2.BoxAndroidClient;
+import com.box.boxandroidlibv2.BoxAndroidConfigBuilder;
 import com.box.boxandroidlibv2.R;
 import com.box.boxandroidlibv2.dao.BoxAndroidOAuthData;
 import com.box.boxandroidlibv2.viewlisteners.OAuthWebViewListener;
 import com.box.boxandroidlibv2.views.OAuthWebView;
+import com.box.boxjavalibv2.authorization.IAuthEvent;
+import com.box.boxjavalibv2.authorization.IAuthFlowMessage;
 import com.box.boxjavalibv2.events.OAuthEvent;
-import com.box.boxjavalibv2.interfaces.IAuthEvent;
-import com.box.boxjavalibv2.interfaces.IAuthFlowMessage;
 
 /**
  * Activity for OAuth. Use this activity by using the intent from createOAuthActivityIntent method. On completion, this activity will put the parcelable
@@ -68,7 +68,7 @@ public class OAuthActivity extends Activity {
      */
     protected void startOAuth(final String clientId, final String clientSecret, String redirectUrl, boolean allowShowRedirect, String deviceId,
         String deviceName) {
-        BoxAndroidClient boxClient = new BoxAndroidClient(clientId, clientSecret, null, null);
+        BoxAndroidClient boxClient = new BoxAndroidClient(clientId, clientSecret, null, null, (new BoxAndroidConfigBuilder()).build());
         oauthView = (OAuthWebView) findViewById(R.id.oauthview);
         oauthView.setAllowShowingRedirectPage(allowShowRedirect);
         oauthView.initializeAuthFlow(this, clientId, clientSecret, redirectUrl);
@@ -77,54 +77,6 @@ public class OAuthActivity extends Activity {
         }
 
         boxClient.authenticate(oauthView, false, getOAuthFlowListener());
-    }
-
-    /**
-     * Create a listener to listen to OAuth flow events.
-     * 
-     * @param boxClient
-     * 
-     * @return OAuthWebViewListener
-     */
-    private OAuthWebViewListener getOAuthFlowListener() {
-        return new OAuthWebViewListener() {
-
-            @Override
-            public void onAuthFlowException(final Exception e) {
-                Intent intent = new Intent();
-                intent.putExtra(ERROR_MESSAGE, e.getMessage());
-                OAuthActivity.this.setResult(RESULT_CANCELED, intent);
-                finish();
-            }
-
-            @Override
-            public void onAuthFlowEvent(final IAuthEvent event, final IAuthFlowMessage message) {
-                if (event == OAuthEvent.OAUTH_CREATED) {
-                    Intent intent = new Intent();
-                    intent.putExtra(BOX_CLIENT_OAUTH, (BoxAndroidOAuthData) message.getData());
-                    OAuthActivity.this.setResult(RESULT_OK, intent);
-                    finish();
-                }
-            }
-
-            @Override
-            public void onSslError(final SslErrorHandler handler, final SslError error) {
-                handler.proceed();
-            }
-
-            @Override
-            public void onError(final int errorCode, final String description, final String failingUrl) {
-                Intent intent = new Intent();
-                intent.putExtra(ERROR_MESSAGE, description);
-                OAuthActivity.this.setResult(RESULT_CANCELED, intent);
-                finish();
-            }
-
-            @Override
-            public void onAuthFlowMessage(IAuthFlowMessage message) {
-            }
-
-        };
     }
 
     /**
@@ -192,5 +144,56 @@ public class OAuthActivity extends Activity {
             intent.putExtra(REDIRECT_URL, redirectUrl);
         }
         return intent;
+    }
+
+    /**
+     * Create a listener to listen to OAuth flow events.
+     * 
+     * @return OAuthWebViewListener
+     */
+    protected OAuthWebViewListener getOAuthFlowListener() {
+        return new OAuthWebViewListener() {
+
+            @Override
+            public void onAuthFlowException(final Exception e) {
+                Intent intent = new Intent();
+                intent.putExtra(ERROR_MESSAGE, e.getMessage());
+                OAuthActivity.this.setResult(RESULT_CANCELED, intent);
+                finish();
+            }
+
+            @Override
+            public void onAuthFlowEvent(final IAuthEvent event, final IAuthFlowMessage message) {
+                if (event == OAuthEvent.OAUTH_CREATED) {
+                    Intent intent = new Intent();
+                    intent.putExtra(BOX_CLIENT_OAUTH, (BoxAndroidOAuthData) message.getData());
+                    OAuthActivity.this.setResult(RESULT_OK, intent);
+                    finish();
+                }
+            }
+
+            @Override
+            public void onSslError(final SslError error, final boolean canceled) {
+                Intent intent = new Intent();
+                if (canceled) {
+                    intent.putExtra(ERROR_MESSAGE, "ssl error:" + error.getPrimaryError());
+                    OAuthActivity.this.setResult(RESULT_CANCELED, intent);
+                    finish();
+                }
+            }
+
+            @Override
+            public void onError(final int errorCode, final String description, final String failingUrl) {
+                Intent intent = new Intent();
+                intent.putExtra(ERROR_MESSAGE, description);
+                OAuthActivity.this.setResult(RESULT_CANCELED, intent);
+                finish();
+            }
+
+            @Override
+            public void onAuthFlowMessage(IAuthFlowMessage message) {
+            }
+
+        };
     }
 }

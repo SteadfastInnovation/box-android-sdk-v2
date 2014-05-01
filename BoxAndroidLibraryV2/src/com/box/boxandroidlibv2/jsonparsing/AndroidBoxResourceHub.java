@@ -11,11 +11,12 @@ import com.box.boxandroidlibv2.dao.BoxAndroidFileVersion;
 import com.box.boxandroidlibv2.dao.BoxAndroidFolder;
 import com.box.boxandroidlibv2.dao.BoxAndroidGroup;
 import com.box.boxandroidlibv2.dao.BoxAndroidGroupMembership;
+import com.box.boxandroidlibv2.dao.BoxAndroidItemPermissions;
 import com.box.boxandroidlibv2.dao.BoxAndroidOAuthData;
 import com.box.boxandroidlibv2.dao.BoxAndroidUser;
 import com.box.boxandroidlibv2.dao.BoxAndroidWebLink;
 import com.box.boxjavalibv2.dao.BoxResourceType;
-import com.box.boxjavalibv2.interfaces.IBoxType;
+import com.box.boxjavalibv2.dao.IBoxType;
 import com.box.boxjavalibv2.jsonparsing.BoxResourceHub;
 
 /**
@@ -51,6 +52,8 @@ public class AndroidBoxResourceHub extends BoxResourceHub {
                 return BoxAndroidWebLink.class;
             case EVENT:
                 return BoxAndroidEvent.class;
+            case ITEM_PERMISSIONS:
+                return BoxAndroidItemPermissions.class;
             case ITEMS:
             case FILES:
             case USERS:
