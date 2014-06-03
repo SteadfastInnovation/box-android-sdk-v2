@@ -15,7 +15,7 @@ android {
 }
 
 dependencies {
-    compile 'net.box:boxjavalibv2:3.0.5'
+    compile 'net.box:boxjavalibv2:3.0.9'
     compile 'com.android.support:support-v4:19.0.1'
     compile 'com.fasterxml.jackson.core:jackson-annotations:2.2.2'
     compile 'com.fasterxml.jackson.core:jackson-core:2.2.2'

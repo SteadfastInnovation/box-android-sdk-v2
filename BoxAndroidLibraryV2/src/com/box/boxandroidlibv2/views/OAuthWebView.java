@@ -11,6 +11,7 @@ import org.apache.http.NameValuePair;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.app.Dialog;
 import android.app.ProgressDialog;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -116,7 +117,7 @@ public class OAuthWebView extends WebView implements IAuthFlowUI {
     public void authenticate(IAuthFlowListener listener) {
         addAuthFlowListener(listener);
 
-        for (IAuthFlowListener l : mListeners) {
+        for (IAuthFlowListener l : getOAuthWebViewListeners()) {
             mWebClient.addListener(wrapOAuthWebViewListener(l));
         }
 
@@ -132,7 +133,7 @@ public class OAuthWebView extends WebView implements IAuthFlowUI {
 
     @Override
     public void addAuthFlowListener(IAuthFlowListener listener) {
-        mListeners.add(wrapOAuthWebViewListener(listener));
+        getOAuthWebViewListeners().add(wrapOAuthWebViewListener(listener));
     }
 
     public void setDevice(final String id, final String name) {
@@ -181,6 +182,10 @@ public class OAuthWebView extends WebView implements IAuthFlowUI {
         return c;
     }
 
+    protected List<OAuthWebViewListener> getOAuthWebViewListeners() {
+        return mListeners;
+    }
+
     /**
      * WebViewClient for the OAuth WebView.
      */
@@ -190,6 +195,7 @@ public class OAuthWebView extends WebView implements IAuthFlowUI {
             PRE, STARTED, FINISHED,
         };
 
+        private static Dialog dialog;
         private BoxClient mBoxClient;
         private final OAuthWebViewData mwebViewData;
         private boolean allowShowRedirectPage = true;
@@ -298,7 +304,13 @@ public class OAuthWebView extends WebView implements IAuthFlowUI {
             fireEvents(OAuthEvent.PAGE_FINISHED, new StringMessage(StringMessage.MESSAGE_URL, url));
         }
 
-        private static ProgressDialog dialog;
+        /**
+         * If you don't need the dialog, just return null.
+         */
+        protected Dialog showDialogWhileWaitingForAuthenticationAPICall() {
+            return ProgressDialog.show(mActivity, mActivity.getText(R.string.boxandroidlibv2_Authenticating),
+                mActivity.getText(R.string.boxandroidlibv2_Please_wait));
+        }
 
         /**
          * Start to create OAuth after getting the code.
@@ -316,8 +328,7 @@ public class OAuthWebView extends WebView implements IAuthFlowUI {
 
             oauthAPICallState = OAuthAPICallState.STARTED;
             try {
-                dialog = ProgressDialog.show(mActivity, mActivity.getText(R.string.boxandroidlibv2_Authenticating),
-                    mActivity.getText(R.string.boxandroidlibv2_Please_wait));
+                dialog = showDialogWhileWaitingForAuthenticationAPICall();
             }
             catch (Exception e) {
                 // WindowManager$BadTokenException will be caught and the app would not display
@@ -331,6 +342,8 @@ public class OAuthWebView extends WebView implements IAuthFlowUI {
             }
             AsyncTask<Null, Null, BoxAndroidOAuthData> task = new AsyncTask<Null, Null, BoxAndroidOAuthData>() {
 
+                private Exception mCreateOauthException;
+
                 @Override
                 protected BoxAndroidOAuthData doInBackground(final Null... params) {
                     BoxAndroidOAuthData oauth = null;
@@ -340,6 +353,7 @@ public class OAuthWebView extends WebView implements IAuthFlowUI {
                     }
                     catch (Exception e) {
                         oauth = null;
+                        mCreateOauthException = e;
                     }
                     return oauth;
                 }
@@ -359,7 +373,7 @@ public class OAuthWebView extends WebView implements IAuthFlowUI {
                         }
                     }
                     else {
-                        fireExceptions(new BoxAndroidLibException());
+                        fireExceptions(new BoxAndroidLibException(mCreateOauthException));
                     }
                 }
             };
