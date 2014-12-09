@@ -1,8 +1,55 @@
-apply plugin: 'android-library'
+buildscript {
+	repositories {
+		mavenCentral()
+	}
+	dependencies {
+		classpath 'com.android.tools.build:gradle:1.0.0-rc4'
+	}
+}
+
+apply plugin: "android-library"
+apply plugin: "maven"
+
+archivesBaseName = "box-android-sdk"
+ext.version = "3.0.7"
+ext.versionCode = 307
+
+repositories {
+	mavenLocal()
+	mavenCentral()
+}
+
+configurations {
+	archives {
+		extendsFrom configurations.default
+	}
+}
+
+dependencies {
+	archives "org.apache.maven.wagon:wagon-ssh:2.2"
+	compile "com.android.support:support-v4:20.+"
+	compile "net.box:boxjavalibv2:3.1.8"
+	compile "com.fasterxml.jackson.core:jackson-annotations:2.2.2"
+	compile "com.fasterxml.jackson.core:jackson-core:2.2.2"
+	compile "com.fasterxml.jackson.core:jackson-databind:2.2.2"
+	compile "commons-codec:commons-codec:1.8"
+	compile "commons-io:commons-io:2.4"
+	compile "commons-lang:commons-lang:2.6"
+	compile "org.apache.httpcomponents:httpclient-cache:4.2.5"
+	compile "org.apache.httpcomponents:httpcore:4.2.4"
+	compile "org.apache.httpcomponents:httpmime:4.2.5"
+}
 
 android {
-    compileSdkVersion 19
-    buildToolsVersion "19.1.0"
+	compileSdkVersion 19
+	buildToolsVersion "19.1.0"
+
+	defaultConfig {
+		minSdkVersion 8
+		targetSdkVersion 19
+		versionName project.ext.version
+		versionCode project.ext.versionCode
+	}
 
 	sourceSets {
 		main {
@@ -12,18 +59,13 @@ android {
 			resources.srcDirs = ["src"]
 		}
 	}
-}
 
-dependencies {
-    compile 'net.box:boxjavalibv2:3.0.9'
-    compile 'com.android.support:support-v4:19.0.1'
-    compile 'com.fasterxml.jackson.core:jackson-annotations:2.2.2'
-    compile 'com.fasterxml.jackson.core:jackson-core:2.2.2'
-    compile 'com.fasterxml.jackson.core:jackson-databind:2.2.2'
-    compile 'commons-codec:commons-codec:1.8'
-    compile 'commons-io:commons-io:2.4'
-    compile 'commons-lang:commons-lang:2.6'
-    compile 'org.apache.httpcomponents:httpclient-cache:4.2.5'
-    compile 'org.apache.httpcomponents:httpcore:4.2.4'
-    compile 'org.apache.httpcomponents:httpmime:4.2.5'
+	libraryVariants.all { variant ->
+        variant.outputs.each { output ->
+            def suffix = "${variant.mergedFlavor.versionName}"
+            def originalFile = output.outputFile
+            def name = originalFile.name.replace(archivesBaseName, "${archivesBaseName}-${suffix}")
+            output.outputFile = new File(originalFile.parent, name)
+        }
+	}
 }

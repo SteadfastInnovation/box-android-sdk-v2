@@ -56,27 +56,42 @@ public class OAuthActivity extends Activity {
         return R.layout.boxandroidlibv2_activity_oauth;
     }
 
-    /**
-     * Start oauth flow.
-     * 
-     * @param clientId
-     * @param clientSecret
-     * @param redirectUrl
-     * @param allowShowRedirect
-     * @param deviceName
-     * @param deviceId
-     */
+    protected boolean shouldAutoRefreshOAuth() {
+        return true;
+    }
+
     protected void startOAuth(final String clientId, final String clientSecret, String redirectUrl, boolean allowShowRedirect, String deviceId,
         String deviceName) {
-        BoxAndroidClient boxClient = new BoxAndroidClient(clientId, clientSecret, null, null, (new BoxAndroidConfigBuilder()).build());
-        oauthView = (OAuthWebView) findViewById(R.id.oauthview);
-        oauthView.setAllowShowingRedirectPage(allowShowRedirect);
-        oauthView.initializeAuthFlow(this, clientId, clientSecret, redirectUrl);
-        if (StringUtils.isNotEmpty(deviceId) && StringUtils.isNotEmpty(deviceName)) {
-            oauthView.setDevice(deviceId, deviceName);
-        }
+        BoxAndroidClient boxClient = createBoxClientForOAuth(clientId, clientSecret, redirectUrl);
+        oauthView = createOAuthWebView(allowShowRedirect, deviceId, deviceName);
+        getOAuthWebView().initializeAuthFlow(this, clientId, clientSecret, redirectUrl, boxClient);
 
-        boxClient.authenticate(oauthView, false, getOAuthFlowListener());
+        boxClient.authenticate(oauthView, shouldAutoRefreshOAuth(), getOAuthFlowListener());
+    }
+
+    protected BoxAndroidClient createBoxClientForOAuth(final String clientId, final String clientSecret, String redirectUrl) {
+        return new BoxAndroidClient(clientId, clientSecret, null, null, (new BoxAndroidConfigBuilder()).build());
+    }
+
+    protected OAuthWebView createOAuthWebView(boolean allowShowRedirect, String deviceId, String deviceName) {
+        OAuthWebView ui = (OAuthWebView) findViewById(getOAuthWebViewRId());
+        ui.setAllowShowingRedirectPage(allowShowRedirect);
+        if (StringUtils.isNotEmpty(deviceId) && StringUtils.isNotEmpty(deviceName)) {
+            ui.setDevice(deviceId, deviceName);
+        }
+        return ui;
+    }
+
+    protected int getOAuthWebViewRId() {
+        return R.id.oauthview;
+    }
+
+    protected void setOAuthWebView(OAuthWebView view) {
+        this.oauthView = view;
+    }
+
+    protected OAuthWebView getOAuthWebView() {
+        return oauthView;
     }
 
     /**
