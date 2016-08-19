@@ -20,6 +20,8 @@ repositories {
 }
 
 configurations {
+	compile.exclude group: 'org.apache.httpcomponents', module: 'httpclient'
+	compile.exclude group: 'commons-logging', module: 'commons-logging'
 	archives {
 		extendsFrom configurations.default
 	}
