@@ -3,11 +3,11 @@ buildscript {
 		mavenCentral()
 	}
 	dependencies {
-		classpath 'com.android.tools.build:gradle:1.0.0-rc4'
+		classpath 'com.android.tools.build:gradle:1.5.0'
 	}
 }
 
-apply plugin: "android-library"
+apply plugin: 'com.android.library'
 apply plugin: "maven"
 
 archivesBaseName = "box-android-sdk"
